@@ -1,24 +1,208 @@
-import {useState} from 'react';
+import { useState, useRef } from 'react';
 import './App.css';
-function App(){
-  const [contract,setContract]=useState('');
-  const [analysis,setAnalysis]=useState(null);
-  return <div style={{background:'#0f0f0f',color:'#fff',minHeight:'100vh'}}>
-    <header style={{padding:'30px',background:'#1a1a1a'}}>
-      <h1 style={{color:'#60a5fa',fontSize:'28px'}}>FinePrint</h1>
-      <p style={{fontSize:'12px',color:'#888'}}>AI CONTRACT ANALYZER</p>
-    </header>
-    <main style={{maxWidth:'1200px',margin:'0 auto',padding:'40px'}}>
-      <textarea style={{width:'100%',height:'300px',background:'#1a1a1a',border:'1px solid #333',borderRadius:'6px',padding:'15px',color:'#fff',fontFamily:'monospace',marginBottom:'30px'}} value={contract} onChange={(e)=>setContract(e.target.value)} placeholder="Paste contract..."/>
-      <div style={{display:'flex',gap:'12px',marginBottom:'40px'}}>
-        <button onClick={()=>setAnalysis({score:72,risks:['Unfavorable terms','Liability limits','IP ambiguity']})} style={{padding:'10px 20px',background:'#60a5fa',color:'#000',border:'none',borderRadius:'6px',fontWeight:'600',cursor:'pointer'}}>🔍 Analyze</button>
-        <button onClick={()=>setContract('SERVICE AGREEMENT...')} style={{padding:'10px 20px',background:'#333',color:'#fff',border:'none',borderRadius:'6px',cursor:'pointer'}}>Load Sample</button>
-      </div>
-      {analysis&&<div style={{padding:'30px',background:'#1a1a1a',borderRadius:'6px',border:'1px solid #333'}}>
-        <h3 style={{color:'#60a5fa',marginBottom:'20px'}}>Risk Score: {analysis.score}</h3>
-        <h4>Risks:</h4><ul>{analysis.risks.map((r,i)=><li key={i} style={{color:'#aaa'}}>⚠️ {r}</li>)}</ul>
-      </div>}
-    </main>
-  </div>;
+
+const SAMPLE_CONTRACT = `SERVICE AGREEMENT
+
+This Agreement is entered into between Client ("Client") and Service Provider ("Provider").
+
+1. SERVICES: Provider agrees to deliver consulting services as outlined in the attached Statement of Work.
+
+2. PAYMENT: Client shall pay Provider $5,000 per month, due within 15 days of invoice.
+
+3. TERM: This agreement commences on the Effective Date and continues for 12 months, auto-renewing unless cancelled.
+
+4. TERMINATION: Provider may terminate this agreement at any time with 5 days notice. Client must provide 90 days notice to terminate.
+
+5. LIABILITY: Provider's total liability under this agreement shall not exceed one month's fees, regardless of the nature of the claim.
+
+6. INTELLECTUAL PROPERTY: All work product, including pre-existing Provider materials incorporated into deliverables, shall become the exclusive property of Provider.
+
+7. CONFIDENTIALITY: Client agrees to keep all Provider pricing and methodologies confidential for 5 years post-termination.
+
+8. GOVERNING LAW: This agreement is governed by the laws of the jurisdiction specified by Provider.`;
+
+function App() {
+  const [contractText, setContractText] = useState('');
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const fileInputRef = useRef(null);
+
+  const wordCount = contractText.trim() ? contractText.trim().split(/\s+/).length : 0;
+
+  const handleAnalyze = () => {
+    if (!contractText.trim()) return;
+    setIsAnalyzing(true);
+    setAnalysis(null);
+    setTimeout(() => {
+      setAnalysis({
+        riskScore: 68,
+        risks: [
+          { clause: 'Termination (Sec. 4)', issue: 'Asymmetric notice period — Provider needs only 5 days, Client needs 90 days', severity: 'High' },
+          { clause: 'Liability (Sec. 5)', issue: 'Liability cap set unusually low at one month\'s fees', severity: 'High' },
+          { clause: 'Intellectual Property (Sec. 6)', issue: 'Pre-existing materials may transfer ownership unintentionally', severity: 'Medium' },
+          { clause: 'Confidentiality (Sec. 7)', issue: 'One-sided obligation — only Client is bound', severity: 'Low' }
+        ],
+        recommendations: [
+          'Negotiate symmetric termination notice (30 days both parties)',
+          'Raise liability cap to at least 3-6 months of fees',
+          'Clarify IP carve-out for Provider\'s pre-existing tools/materials',
+          'Add mutual confidentiality obligations'
+        ]
+      });
+      setIsAnalyzing(false);
+    }, 1500);
+  };
+
+  const handleLoadSample = () => {
+    setContractText(SAMPLE_CONTRACT);
+    setFileName('sample-contract.txt');
+    setAnalysis(null);
+  };
+
+  const handleClear = () => {
+    setContractText('');
+    setFileName('');
+    setAnalysis(null);
+  };
+
+  const readFile = (file) => {
+    if (!file) return;
+    file.text().then(text => {
+      setContractText(text);
+      setFileName(file.name);
+      setAnalysis(null);
+    });
+  };
+
+  const handleFileInput = (e) => {
+    if (e.target.files?.length) readFile(e.target.files[0]);
+    e.target.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files?.length) readFile(e.dataTransfer.files[0]);
+  };
+
+  const severityColor = (s) => {
+    if (s === 'High') return '#ef4444';
+    if (s === 'Medium') return '#f59e0b';
+    return '#6b7280';
+  };
+
+  return (
+    <div className="fp-app">
+      <header className="fp-header">
+        <div className="fp-header-inner">
+          <div className="fp-brand">
+            <div className="fp-logo">§</div>
+            <div>
+              <h1>FinePrint</h1>
+              <p className="fp-eyebrow">AI CONTRACT RISK ANALYZER</p>
+            </div>
+          </div>
+          <p className="fp-tagline">
+            Read the fine print before you sign it — in seconds,<br />
+            in plain English.
+          </p>
+        </div>
+      </header>
+
+      <main className="fp-main">
+        <div className="fp-input-label">
+          PASTE A CONTRACT · NDA · LEASE · FREELANCE AGREEMENT · TERMS OF SERVICE
+        </div>
+
+        <section
+          className={`fp-dropzone ${isDragging ? 'fp-dropzone-active' : ''}`}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
+          <textarea
+            className="fp-textarea"
+            value={contractText}
+            onChange={(e) => { setContractText(e.target.value); setAnalysis(null); }}
+            placeholder="Paste the full contract text here, drag & drop a file, or load the sample contract to see how it works."
+          />
+          <div className="fp-dropzone-footer">
+            <span className="fp-dropzone-hint">⬆ Drag &amp; drop a .txt file anywhere in this box</span>
+            {fileName && <span className="fp-filename">📄 {fileName}</span>}
+          </div>
+        </section>
+
+        <section className="fp-controls">
+          <button className="fp-btn fp-btn-primary" onClick={handleAnalyze} disabled={isAnalyzing || !contractText.trim()}>
+            {isAnalyzing ? '⏳ Analyzing…' : '🔍 Analyze contract'}
+          </button>
+          <button className="fp-btn fp-btn-secondary" onClick={handleLoadSample}>
+            Load sample contract
+          </button>
+          <button className="fp-btn fp-btn-secondary" onClick={() => fileInputRef.current?.click()}>
+            ＋ Add Files
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,.md,text/plain"
+            style={{ display: 'none' }}
+            onChange={handleFileInput}
+          />
+          <button className="fp-btn fp-btn-tertiary" onClick={handleClear}>
+            Clear
+          </button>
+          <div className="fp-count">{wordCount} words</div>
+        </section>
+
+        {analysis && (
+          <section className="fp-results">
+            <div className="fp-score-row">
+              <div className="fp-score-circle" style={{
+                background: `conic-gradient(#ef4444 0% ${analysis.riskScore}%, #1c1c1c ${analysis.riskScore}% 100%)`
+              }}>
+                <div className="fp-score-inner">{analysis.riskScore}</div>
+              </div>
+              <div>
+                <div className="fp-score-label">RISK SCORE</div>
+                <div className="fp-score-sub">Moderate-to-high risk — review flagged clauses before signing</div>
+              </div>
+            </div>
+
+            <div className="fp-risks">
+              <div className="fp-section-title">Flagged Clauses</div>
+              {analysis.risks.map((r, i) => (
+                <div key={i} className="fp-risk-row">
+                  <span className="fp-severity" style={{ color: severityColor(r.severity), borderColor: severityColor(r.severity) }}>
+                    {r.severity}
+                  </span>
+                  <div>
+                    <div className="fp-risk-clause">{r.clause}</div>
+                    <div className="fp-risk-issue">{r.issue}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="fp-recommendations">
+              <div className="fp-section-title">What To Negotiate</div>
+              <ul>
+                {analysis.recommendations.map((rec, i) => (
+                  <li key={i}>{rec}</li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
+
+        <footer className="fp-footer">
+          FINEPRINT · reads legalese → flags risk → tells you what to negotiate
+        </footer>
+      </main>
+    </div>
+  );
 }
+
 export default App;
