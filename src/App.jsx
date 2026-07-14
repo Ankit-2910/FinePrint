@@ -27,32 +27,36 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState('');
+  const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
 
   const wordCount = contractText.trim() ? contractText.trim().split(/\s+/).length : 0;
 
-  const handleAnalyze = () => {
+  const handleAnalyze = async () => {
     if (!contractText.trim()) return;
     setIsAnalyzing(true);
     setAnalysis(null);
-    setTimeout(() => {
-      setAnalysis({
-        riskScore: 68,
-        risks: [
-          { clause: 'Termination (Sec. 4)', issue: 'Asymmetric notice period — Provider needs only 5 days, Client needs 90 days', severity: 'High' },
-          { clause: 'Liability (Sec. 5)', issue: 'Liability cap set unusually low at one month\'s fees', severity: 'High' },
-          { clause: 'Intellectual Property (Sec. 6)', issue: 'Pre-existing materials may transfer ownership unintentionally', severity: 'Medium' },
-          { clause: 'Confidentiality (Sec. 7)', issue: 'One-sided obligation — only Client is bound', severity: 'Low' }
-        ],
-        recommendations: [
-          'Negotiate symmetric termination notice (30 days both parties)',
-          'Raise liability cap to at least 3-6 months of fees',
-          'Clarify IP carve-out for Provider\'s pre-existing tools/materials',
-          'Add mutual confidentiality obligations'
-        ]
+    setError(null);
+    try {
+      const prompt = `You are a contract risk analyzer. Analyze the following contract and return ONLY valid JSON (no markdown fences) matching exactly this shape:
+{"riskScore": <integer 0-100, higher = riskier>, "risks": [{"clause": "<short clause name/section>", "issue": "<plain-English description of the risk>", "severity": "High"|"Medium"|"Low"}], "recommendations": ["<specific negotiation ask>"]}
+Flag only the most consequential clauses (aim for 3-6 risks).
+
+Contract:
+${contractText}`;
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Analysis failed');
+      setAnalysis(JSON.parse(data.text));
+    } catch (e) {
+      setError(e.message || 'Something went wrong analyzing this contract.');
+    } finally {
       setIsAnalyzing(false);
-    }, 1500);
+    }
   };
 
   const handleLoadSample = () => {
@@ -156,6 +160,12 @@ function App() {
           </button>
           <div className="fp-count">{wordCount} words</div>
         </section>
+
+        {error && (
+          <section className="fp-results">
+            <div className="fp-risk-issue" style={{ color: '#ef4444' }}>⚠ {error}</div>
+          </section>
+        )}
 
         {analysis && (
           <section className="fp-results">
